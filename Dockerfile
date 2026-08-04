@@ -1,3 +1,3 @@
-FROM node:16-alpine
+FROM selenium/standalone-chrome:latest
 
-RUN apk add -U git curl
+RUN apt update
