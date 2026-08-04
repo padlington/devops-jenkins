@@ -6,7 +6,7 @@ agent { dockerfile true }
     stage('Cloning Git') {
 	    steps{
 	      sh 'echo checking out source code'
-        sh 'java -v'
+        sh 'java --version'
 	    }  
      }  
  
