@@ -1,0 +1,41 @@
+FROM selenium/standalone-chrome:latest
+
+USER root 
+
+# Update package list and install zip utilities
+RUN apt-get update && apt-get install -y \
+    curl \
+    zip \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+	
+# Download and install AWS CLI v2
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+    && unzip awscliv2.zip \
+    && ./aws/install \
+    && rm -rf aws awscliv2.zip
+	
+	
+# Define the working directory inside the container
+WORKDIR /fuj
+
+#ARG CACHE_BUST=1
+
+# Copy the entire local project directory into /fuj
+COPY Automation ./Automation
+
+COPY TestAutomation ./TestAutomation
+
+COPY TestNG ./TestNG
+
+COPY testoutput ./testoutput
+
+RUN chmod -R 777 /fuj/TestNG
+
+RUN chmod -R 777 /fuj/TestAutomation
+
+RUN chmod -R 777 /fuj/Automation
+
+RUN chmod -R 777 /fuj/testoutput
+
+USER 1200
