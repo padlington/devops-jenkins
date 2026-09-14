@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ant \
     zip \
     unzip \
+	openssh-client \
     ca-certificates \
     curl \
     git \
@@ -27,6 +28,14 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # Verify installations
 RUN java -version && ant -version && aws --version
 
+# Create a group and user matching UID 110
+RUN groupadd -g 114 jenkins && \
+    useradd -u 110 -g jenkins -m -s /bin/bash jenkins
+
+# (Optional) Switch to this user
+#USER 110
+
+
 # Set default working directory
 WORKDIR /opt/IBM/SMP
 
@@ -40,11 +49,9 @@ COPY classes/businessobjects ./maximo/applications/maximo/businessobjects
 COPY buildJars ./buildJars
 
 #Copy source for now - testing
-WORKDIR /fuj/workspace
-COPY VSBAMAS ./VSBAMAS
+#WORKDIR /fuj/workspace
+#COPY VSBAMAS ./VSBAMAS
 
 #Copy tools jars
 COPY customJars ./customJars
 
-# Default command
-#CMD ["ant", "-version"]
