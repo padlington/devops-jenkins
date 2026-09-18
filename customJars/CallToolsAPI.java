@@ -385,7 +385,7 @@ public class CallToolsAPI
 			
 			String mode = "add";
 			
-			String maxinstUrl = getMaxInstUrl(tgtSystem);
+			String maxinstUrl = getMaxInstUrl(tgtSystem, workspaceFolder);
 			
 			if (maxinstUrl == null)
 			{
