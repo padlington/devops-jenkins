@@ -1,8 +1,10 @@
 package calltoolsapi;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -39,7 +41,7 @@ import java.nio.file.Files;
  */
 public class CallToolsAPI 
 {
-	//private static String  action;
+	private static String  version = "1.1";
 	
 	
     public CallToolsAPI()   
@@ -55,7 +57,7 @@ public class CallToolsAPI
     {
     	try 
     	{
-    		    		
+    		System.out.println("CallToolsAPI version " + version);    		    		
     		boolean success  = false; 
     		if (args.length > 0)
     		{
@@ -63,14 +65,15 @@ public class CallToolsAPI
     			System.out.println("Action is " + action);
     			if (action.equalsIgnoreCase("GETBLDSTATUS"))
     			{
-    				if (args.length != 3)
+    				if (args.length != 4)
     				{
-    					System.out.println("Usage: callToolsAPI.jar <action> <apikey> <maxinsturl> <archfile> <url>");
+    					System.out.println("Usage: callToolsAPI.jar <action> <apikey> <tgtsystem> <workspacefolder>");
     					System.exit(1);
     				}
     				String apiKey = args[1];
     				String tgtSystem = args[2];
-    				String maxinstUrl = getMaxInstUrl(tgtSystem);
+    				String workspaceFolder = args[3];
+    				String maxinstUrl = getMaxInstUrl(tgtSystem, workspaceFolder);
     				
     				if (maxinstUrl == null)
     				{
@@ -84,15 +87,16 @@ public class CallToolsAPI
     			}
     			else if (action.equalsIgnoreCase("GETARCHLIST"))
     			{
-    				if (args.length != 3)
+    				if (args.length != 4)
     				{
-    					System.out.println("Usage: callToolsAPI.jar <action> <apikey> <maxinsturl> <archfile> <url>");
+    					System.out.println("Usage: callToolsAPI.jar <action> <apikey> <tgtsystem> <workspacefolder>");
     					System.exit(1);
     				}
     				String apiKey = args[1];
     				String tgtSystem = args[2];
+    				String workspaceFolder = args[3];
     				
-    				String maxinstUrl = getMaxInstUrl(tgtSystem);
+    				String maxinstUrl = getMaxInstUrl(tgtSystem, workspaceFolder);
     				
     				if (maxinstUrl == null)
     				{
@@ -114,29 +118,31 @@ public class CallToolsAPI
     			}
     			else if (action.equalsIgnoreCase("ADDARCH"))
     			{
-    				if (args.length != 5)
+    				if (args.length != 6)
     				{
-    					System.out.println("Usage: callToolsAPI.jar <action> <apikey> <tgtsystem> <archivename> <archiveurl>");
+    					System.out.println("Usage: callToolsAPI.jar <action> <apikey> <tgtsystem> <archivename> <archiveurl> <workspaceFolder>");
     					System.exit(1);
     				}
     				String apiKey = args[1];
     				String tgtSystem = args[2];
     				String archiveName = args[3];
     				String archiveUrl = args[4];
-    				success = addArchive(tgtSystem, apiKey, archiveName, archiveUrl);
+    				String workspaceFolder = args[5];
+    				success = addArchive(tgtSystem, apiKey, archiveName, archiveUrl, workspaceFolder);
     			}
     			else if (action.equalsIgnoreCase("ADDARCHTEST"))
     			{
-    				if (args.length != 5)
+    				if (args.length != 6)
     				{
-    					System.out.println("Usage: callToolsAPI.jar <action> <apikey> <tgtsystem> <archivename> <archiveurl>");
+    					System.out.println("Usage: callToolsAPI.jar <action> <apikey> <tgtsystem> <archivename> <archiveurl> <workspaceFolder>");
     					System.exit(1);
     				}
     				String apiKey = args[1];
     				String tgtSystem = args[2];
     				String archiveName = args[3];
     				String archiveUrl = args[4];
-    				success = addArchiveTest(tgtSystem, apiKey, archiveName, archiveUrl);
+    				String workspaceFolder = args[5];
+    				success = addArchiveTest(tgtSystem, apiKey, archiveName, archiveUrl, workspaceFolder);
     			}
     			else if (action.equalsIgnoreCase("DELARCH"))
     			{
@@ -177,13 +183,20 @@ public class CallToolsAPI
     			}
     			else if (action.equalsIgnoreCase("CHECKDEPLOYMENT"))
     			{
+    				if (args.length != 6)
+    				{
+    					System.out.println("Usage: callToolsAPI.jar <action> <apikey> <tgtsystem> <nextseqstr> <waittime> <workspaceFolder>");
+    					System.exit(1);
+    				}
+    				
     				String apiKey = args[1];
-    				//String manageUrl = args[2];
     				String tgtSystem = args[2];
     				String versionStr = args[3];
     				String waitTimeStr = args[4];
     				int waitTime = Integer.parseInt(waitTimeStr);
-    				success = checkDeploymentStatus(apiKey, tgtSystem, versionStr, waitTime);
+    				String workspaceFolder = args[5];
+    				success = checkDeploymentStatus(apiKey, tgtSystem, versionStr, waitTime, workspaceFolder);
+    				
     			}
     			else if (action.equalsIgnoreCase("SENDEMAIL"))
     			{
@@ -261,12 +274,114 @@ public class CallToolsAPI
      * Add the given archive  
      * If the archive already exists it must be an Update call 
      */
-	private static boolean addArchive(String tgtSystem, String apiKey, String archiveName, String archiveUrl)
+	private static boolean addArchive(String tgtSystem, String apiKey, String archiveName, String archiveUrl, String workspaceFolder)
 	{
 		System.out.println("addArchive entering");
 		boolean res = true;
 		
 		try {
+			
+			String mode = "add";
+			
+			String maxinstUrl = getMaxInstUrl(tgtSystem,workspaceFolder);
+			
+			if (maxinstUrl == null)
+			{
+				System.out.println("Invalid target system " + tgtSystem);
+	        	return false;
+			}
+			
+			if (archiveExists(maxinstUrl, apiKey, archiveName, archiveUrl))
+			{
+				System.out.println("addArchive archive exists so must do an update");
+				//deleteArchive(maxinstUrl, apiKey, archiveName, archiveUrl);
+				mode = "update";
+			}
+			
+	    	//HttpClient client = HttpClient.newHttpClient();
+	    	HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
+	
+	    	String requestBody = "";
+	    	if (archiveUrl.contains("naviam"))
+			{
+				requestBody = "{\"name\": \"" + archiveName + "\",  \"secretname\": \"mas-manage-cl2--cac--sn\", " 
+	        		               +  "\"mode\": \"" + mode + "\", \"url\": \"" 
+	        		              + archiveUrl +  "\" }";
+			}
+			else
+			{
+				requestBody = "{\"name\": \"" + archiveName + "\",  " 
+ 		               +  "\"mode\": \"" + mode + "\", \"url\": \"" 
+ 		              + archiveUrl +  "\" }";
+			}
+	        
+	        System.out.println("addArchive body is " + requestBody);
+	        
+	        String tgtUrl = "https://" + maxinstUrl + "/toolsapi/toolservice/updatecustomizationarchive";
+	        
+	        System.out.println("addArchive tgtUrl is " + tgtUrl);
+	        
+	        
+	
+	        HttpRequest request = HttpRequest.newBuilder()
+	                .uri(URI.create(tgtUrl)) 
+	                .header("Content-Type", "application/json") 
+	                .header("apikey", apiKey)
+	                .POST(HttpRequest.BodyPublishers.ofString(requestBody)) 
+	                .build();
+	
+	        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+	
+	        System.out.println("Status Code: " + response.statusCode());
+	        System.out.println("Response Body: " + response.body());
+	        if (response.statusCode() != 200)
+	        {
+	        	System.out.println("Error calling API " + response.body());
+	        	res = false;
+	        }
+		}
+        catch (Exception ex)
+        {
+        	System.out.println("Exception: " + ex.getMessage());
+        	res = false;
+        }
+		return res;
+	}
+	
+	/**
+     * Add the given archive  
+     * If the archive already exists it must be an Update call 
+     */
+	private static boolean addArchiveNoURL(String tgtSystem, String apiKey, String archiveName, String baseUrl, String module,
+			String workspaceFolder)
+	{
+		System.out.println("addArchive entering");
+		//Read maxrelease.txt 
+		//C:\Users\adlingtonp\repos\VSBAMAS\maximoconfig\detmas\dbcs\maxrelease.txt
+		//workspace/module/dbcs/maxrelease.txt
+		//e.g. V9000_59
+		FileReader fr;
+				
+		boolean res = true;
+		
+		try {
+			String filePath = workspaceFolder + "//maximoconfig//" + module + "//dbcs";
+			
+			fr = new FileReader(filePath + "//maxrelease.txt");
+			BufferedReader br = new BufferedReader(fr);
+			String lastVersionStr = "";
+			String line = "";
+			//Read the file from auto deploy list
+			while((line = br.readLine()) != null)  
+			{  
+				lastVersionStr = line.trim();
+				//String[] bits = lastVersionStr.split("_");
+				//prefix = bits[0];
+				//lastVer = Integer.parseInt(bits[1]);
+			}
+			//construct url
+			//e.g. "https://customisations-vsba-fujitsu.devops.naviam.cloud/detmas-V9000_72.zip" }
+			String archiveUrl = baseUrl + "/" + module + "-" + lastVersionStr + ".zip";
 			
 			String mode = "add";
 			
@@ -404,7 +519,7 @@ public class CallToolsAPI
      * Test the addArchive function  
      * If the archive already exists it must be an Update call 
      */
-	private static boolean addArchiveTest(String tgtSystem, String apiKey, String archiveName, String archiveUrl)
+	private static boolean addArchiveTest(String tgtSystem, String apiKey, String archiveName, String archiveUrl, String workspaceFolder)
 	{
 		System.out.println("addArchiveTest entering");
 		boolean res = true;
@@ -412,7 +527,7 @@ public class CallToolsAPI
 		try {
 			String mode = "add";
 			
-			String maxinstUrl = getMaxInstUrl(tgtSystem);
+			String maxinstUrl = getMaxInstUrl(tgtSystem, workspaceFolder);
 			
 			if (maxinstUrl == null)
 			{
@@ -448,7 +563,7 @@ public class CallToolsAPI
 	        
 	        System.out.println("addArchiveTest maxinst url is " + tgtUrl);
 	        
-	        String manageUrl = getManageUrl(tgtSystem);
+	        String manageUrl = getManageUrl(tgtSystem, workspaceFolder);
 	        tgtUrl = "https://" + manageUrl + "/maximo/api/systeminfo?lean=1";
 	        System.out.println("addArchiveTest manageurl is " + tgtUrl);
 	        
@@ -463,7 +578,39 @@ public class CallToolsAPI
 		return res;
 	}
 
-	private static String getMaxInstUrl(String tgtSystem)
+	private static String getMaxInstUrl(String tgtSystem, String workspaceFolder)
+	{
+		System.out.println("getMaxInstUrl entering");
+		String maxinstUrl = null;
+		FileReader fr;
+		
+		try {
+			String filePath = workspaceFolder + "//urls.txt";
+			fr = new FileReader(filePath);
+			BufferedReader br = new BufferedReader(fr);
+			String lastVersionStr = "";
+			String line = "";
+			while((line = br.readLine()) != null)  
+			{  
+				if (line.startsWith(tgtSystem))
+				{
+					String[] bits = line.trim().split(",");
+					if (bits.length == 3)
+					{
+						maxinstUrl = bits[1];
+					}
+					break;
+				}
+			}
+		}
+        catch (Exception ex)
+        {
+        	System.out.println("Exception: " + ex.getMessage());
+        }
+		return maxinstUrl;
+	}
+	
+	private static String getMaxInstUrlV1(String tgtSystem)
 	{
 		System.out.println("getMaxInstUrl entering");
 		
@@ -505,7 +652,7 @@ public class CallToolsAPI
 		return maxinstUrl;
 	}
 	
-	private static String getManageUrl(String tgtSystem)
+	private static String getManageUrlV1(String tgtSystem)
 	{
 		System.out.println("getManageUrl entering");
 		
@@ -543,6 +690,38 @@ public class CallToolsAPI
 		{
 			System.out.println("getManageUrl Invalid tgt system " + tgtSystem);
 		}
+		return manageUrl;
+	}
+	
+	private static String getManageUrl(String tgtSystem, String workspaceFolder)
+	{
+		System.out.println("getManageUrl entering");
+		String manageUrl = null;
+		FileReader fr;
+	
+		try {
+			String filePath = workspaceFolder + "//urls.txt";
+			fr = new FileReader(filePath);
+			BufferedReader br = new BufferedReader(fr);
+			String lastVersionStr = "";
+			String line = "";
+			while((line = br.readLine()) != null)  
+			{  
+				if (line.startsWith(tgtSystem))
+				{
+					String[] bits = line.trim().split(",");
+					if (bits.length == 3)
+					{
+						manageUrl = bits[2];
+					}
+					break;
+				}
+			}
+		}
+        catch (Exception ex)
+        {
+        	System.out.println("Exception: " + ex.getMessage());
+        }
 		return manageUrl;
 	}
 	
@@ -829,7 +1008,7 @@ public class CallToolsAPI
 	}
 	
 	
-	private static boolean checkDeploymentStatus(String apiKey, String tgtSystem, String versionStr, int waitTime )
+	private static boolean checkDeploymentStatus(String apiKey, String tgtSystem, String versionStr, int waitTime, String workspaceFolder )
 	{
 		boolean deployed = false;
 		long startTime = System.currentTimeMillis();
@@ -844,7 +1023,7 @@ public class CallToolsAPI
 		System.out.println("Checking Deployment Status end time " + dateTime.format(formatter));
 		
 		
-		String maxinstUrl = getMaxInstUrl(tgtSystem);
+		String maxinstUrl = getMaxInstUrl(tgtSystem, workspaceFolder);
 		
 		if (maxinstUrl == null)
 		{
@@ -852,7 +1031,7 @@ public class CallToolsAPI
         	return false;
 		}
 		
-		String manageUrl = getManageUrl(tgtSystem);
+		String manageUrl = getManageUrl(tgtSystem, workspaceFolder);
 		
 		if (manageUrl == null)
 		{
@@ -899,7 +1078,8 @@ public class CallToolsAPI
 					System.out.println("Wait time has expired");
 					break;
 				}
-				String version = getDETMASVersion(manageUrl, apiKey);
+				//Check that the product versions are correct
+				String version = getVersion(manageUrl, apiKey);
 				String [] items = versionStr.split("_");
 				String expectedVersionStr = items[1];
 				if (version.equalsIgnoreCase(expectedVersionStr))
@@ -923,6 +1103,7 @@ public class CallToolsAPI
 		return deployed;
 		
 	}
+	
 	
 	private static String  getVersion(String manageUrl, String apiKey)
 	{
