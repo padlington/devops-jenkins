@@ -582,13 +582,9 @@ public class CallToolsAPI
 	{
 		System.out.println("getMaxInstUrl entering");
 		String maxinstUrl = null;
-		FileReader fr;
-		
-		try {
-			String filePath = workspaceFolder + "//urls.txt";
-			fr = new FileReader(filePath);
-			BufferedReader br = new BufferedReader(fr);
-			String lastVersionStr = "";
+		String filePath = workspaceFolder + "//urls.txt";
+		try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+			
 			String line = "";
 			while((line = br.readLine()) != null)  
 			{  
@@ -697,13 +693,10 @@ public class CallToolsAPI
 	{
 		System.out.println("getManageUrl entering");
 		String manageUrl = null;
-		FileReader fr;
-	
-		try {
-			String filePath = workspaceFolder + "//urls.txt";
-			fr = new FileReader(filePath);
-			BufferedReader br = new BufferedReader(fr);
-			String lastVersionStr = "";
+		String filePath = workspaceFolder + "//urls.txt";
+		
+		try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+			
 			String line = "";
 			while((line = br.readLine()) != null)  
 			{  
@@ -722,6 +715,7 @@ public class CallToolsAPI
         {
         	System.out.println("Exception: " + ex.getMessage());
         }
+		
 		return manageUrl;
 	}
 	
