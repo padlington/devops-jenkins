@@ -41,7 +41,7 @@ import java.nio.file.Files;
  */
 public class CallToolsAPI 
 {
-	private static String  version = "1.2";
+	private static String  version = "1.3";
 	
 	private static final HttpClient GLOBAL_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -585,7 +585,7 @@ public class CallToolsAPI
 	{
 		System.out.println("getMaxInstUrl entering");
 		String maxinstUrl = null;
-		String filePath = workspaceFolder + "//urls.txt";
+		String filePath = workspaceFolder + "//buildCommon//urls.txt";
 		try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
 			
 			String line = "";
@@ -696,7 +696,7 @@ public class CallToolsAPI
 	{
 		System.out.println("getManageUrl entering");
 		String manageUrl = null;
-		String filePath = workspaceFolder + "//urls.txt";
+		String filePath = workspaceFolder + "//buildCommon//urls.txt";
 		
 		try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
 			
