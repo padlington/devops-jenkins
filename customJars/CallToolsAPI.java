@@ -23,7 +23,7 @@ import java.util.Vector;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
+import java.time.Duration;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -41,7 +41,13 @@ import java.nio.file.Files;
  */
 public class CallToolsAPI 
 {
-	private static String  version = "1.1";
+	private static String  version = "1.2";
+	
+	private static final HttpClient GLOBAL_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .sslContext(insecureContext())
+            .build();
+
 	
 	
     public CallToolsAPI()   
@@ -51,6 +57,15 @@ public class CallToolsAPI
     
      /**
      * Call the tools api in the MAXINST Pod 
+     * Valid Actions are 
+     * GETBLDSTATUS - call toolsapi/toolservice/getbuildstatus
+     * GETARCHLIST - call toolsapi/toolservice/updatecustomizationarchive with mode = GET 
+     * ADDARCH - call toolsapi/toolservice/updatecustomizationarchive with mode ADD or UPDATE
+     * CHECKDEPLOYMENT - wait for maxinst pod to stop\start and then manage pod
+     * for maxinst pod just loop and call toolsapi/toolservice/getbuildstatus
+     * for manage loop and call maximo/api/systeminfo?lean=1
+     * SENDEMAIL - call the power platform API to generate the Teams message
+     * 
      * @param args
      */
     public static void main(String[] args) 
@@ -215,6 +230,7 @@ public class CallToolsAPI
     		else
     		{
     			System.out.println("Usage: callToolsAPI.jar <action> <maxinsturl> <archfile> <url>");
+    			System.out.println("Valid actions GETBLDSTATUS GETARCHLIST ADDARCH CHECKDEPLOYMEMNT SENDEMAIL");
     			System.exit(1);
     		}
     		
@@ -229,18 +245,18 @@ public class CallToolsAPI
 	}
         
     
+    /**
+     * Delete the given archive  
+     */
     private static boolean deleteArchive(String maxinstUrl, String apiKey, String archiveName, String archiveUrl)
 	{
 		System.out.println("deleteArchive entering");
 		boolean res = true;
 				
-    	HttpClient client = HttpClient.newHttpClient();
-
-        String requestBody = "{ \"name\": \"" + archiveName 
+    	String requestBody = "{ \"name\": \"" + archiveName 
         		               + "\", \"mode\": \"delete\", \"url\": \"" 
         		              + archiveUrl +  "\" }";
          
-        
         String tgtUrl = "https://" + maxinstUrl + "/toolsapi/toolservice/updatecustomizationarchive";
         
         try {
@@ -252,7 +268,7 @@ public class CallToolsAPI
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody)) 
                 .build();
 
-           HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+           HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
            System.out.println("Status Code: " + response.statusCode());
            System.out.println("Response Body: " + response.body());
@@ -298,9 +314,6 @@ public class CallToolsAPI
 				mode = "update";
 			}
 			
-	    	//HttpClient client = HttpClient.newHttpClient();
-	    	HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
-	
 	    	String requestBody = "";
 	    	if (archiveUrl.contains("naviam"))
 			{
@@ -316,13 +329,9 @@ public class CallToolsAPI
 			}
 	        
 	        System.out.println("addArchive body is " + requestBody);
-	        
 	        String tgtUrl = "https://" + maxinstUrl + "/toolsapi/toolservice/updatecustomizationarchive";
-	        
 	        System.out.println("addArchive tgtUrl is " + tgtUrl);
-	        
-	        
-	
+	        	
 	        HttpRequest request = HttpRequest.newBuilder()
 	                .uri(URI.create(tgtUrl)) 
 	                .header("Content-Type", "application/json") 
@@ -330,7 +339,7 @@ public class CallToolsAPI
 	                .POST(HttpRequest.BodyPublishers.ofString(requestBody)) 
 	                .build();
 	
-	        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+	        HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 	
 	        System.out.println("Status Code: " + response.statusCode());
 	        System.out.println("Response Body: " + response.body());
@@ -364,7 +373,7 @@ public class CallToolsAPI
 				
 		boolean res = true;
 		
-		try {
+        try {
 			String filePath = workspaceFolder + "//maximoconfig//" + module + "//dbcs";
 			
 			fr = new FileReader(filePath + "//maxrelease.txt");
@@ -399,9 +408,6 @@ public class CallToolsAPI
 				//deleteArchive(maxinstUrl, apiKey, archiveName, archiveUrl);
 				mode = "update";
 			}
-			
-	    	//HttpClient client = HttpClient.newHttpClient();
-	    	HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
 	
 	    	String requestBody = "";
 	    	if (archiveUrl.contains("naviam"))
@@ -422,8 +428,6 @@ public class CallToolsAPI
 	        String tgtUrl = "https://" + maxinstUrl + "/toolsapi/toolservice/updatecustomizationarchive";
 	        
 	        System.out.println("addArchive tgtUrl is " + tgtUrl);
-	        
-	        
 	
 	        HttpRequest request = HttpRequest.newBuilder()
 	                .uri(URI.create(tgtUrl)) 
@@ -432,7 +436,7 @@ public class CallToolsAPI
 	                .POST(HttpRequest.BodyPublishers.ofString(requestBody)) 
 	                .build();
 	
-	        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+	        HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 	
 	        System.out.println("Status Code: " + response.statusCode());
 	        System.out.println("Response Body: " + response.body());
@@ -450,16 +454,15 @@ public class CallToolsAPI
 		return res;
 	}
 	
+	/**
+     * Call the power api to send a Teams Message  
+     */
 	private static boolean sendEmail(String message, String teamsKey, String debugFlag)
 	{
 		System.out.println("sendEmail entering");
 		boolean res = true;
 		
-		try {
-			
-	    	HttpClient client = HttpClient.newHttpClient();
-	    	//HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
-	
+        try {
 	    	 String requestBody = "{\"type\": \"message\","   
 		               +  " \"attachments\": [ { \"contentType\": \"application/vnd.microsoft.card.adaptive\"," 
 	    			   + " \"content\": { "
@@ -497,7 +500,7 @@ public class CallToolsAPI
 	                .POST(HttpRequest.BodyPublishers.ofString(requestBody)) 
 	                .build();
 	
-	        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+	        HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 	
 	        System.out.println("Status Code: " + response.statusCode());
 	        System.out.println("Response Body: " + response.body());
@@ -725,9 +728,6 @@ public class CallToolsAPI
 		JSONObject jo = null;
 		boolean res = true;
 				
-    	//HttpClient client = HttpClient.newHttpClient();
-    	HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
-
         String requestBody = "{\"mode\": \"get\" }";
         
         String tgtUrl = "https://" + maxinstUrl + "/toolsapi/toolservice/updatecustomizationarchive";
@@ -742,7 +742,7 @@ public class CallToolsAPI
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody)) 
                 .build();
 
-           HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+           HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
            System.out.println("getArchiveList Status Code: " + response.statusCode());
            System.out.println("getArchiveList Response Body: " + response.body());
@@ -800,8 +800,6 @@ public class CallToolsAPI
 		System.out.println("getBuildStatus entering");
 		boolean res = true;
 		
-    	HttpClient client = HttpClient.newHttpClient();
-
         String requestBody = "{\"mode\": \"get\" }";
         
         String tgtUrl = "https://" + maxinstUrl + "/toolsapi/toolservice/getbuildstatus";
@@ -815,7 +813,7 @@ public class CallToolsAPI
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody)) 
                 .build();
 
-           HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+           HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
            System.out.println("Status Code: " + response.statusCode());
            System.out.println("Response Body: " + response.body());
@@ -829,12 +827,14 @@ public class CallToolsAPI
            {
         	   System.out.println(" !!!!! Maxinst has gone down");
            }
+           
         }
         catch (Exception ex)
         {
         	System.out.println("Exception: " + ex.getMessage());
         	res = false;
         }
+      
 		return res;
 	}
 
@@ -842,7 +842,6 @@ public class CallToolsAPI
 
 	private static void uploadPDF()
     {
-		HttpClient client = HttpClient.newHttpClient();
 		
 		String url = "https://stbpdanzclient001ipm.file.core.windows.net/ipmdoclinks/workorders/15304461/_Test.pdf";
 		String url2 = "https://stbpdanzclient001ipm.file.core.windows.net/ipmdoclinks/workorders/15304461/_Test.pdf?comp=range&timeout=60";
@@ -872,7 +871,7 @@ public class CallToolsAPI
 		                .build();
 		        
 
-	           HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+	           HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
 	           System.out.println("Status Code: " + response.statusCode());
 	           System.out.println("Response Body: " + response.body());
@@ -892,7 +891,7 @@ public class CallToolsAPI
 		                .POST(HttpRequest.BodyPublishers.ofByteArray(Files.readAllBytes(file.toPath())))
 		                .build();
 		        
-		        response = client.send(request2, HttpResponse.BodyHandlers.ofString());
+		        response = GLOBAL_CLIENT.send(request2, HttpResponse.BodyHandlers.ofString());
 		        
 	        }
 		 catch (Exception ex)
@@ -906,8 +905,6 @@ public class CallToolsAPI
 	
 	private static void callToolsAPI()
     {
-    	HttpClient client = HttpClient.newHttpClient();
-
         String requestBody = "{\"name\": \"mas-det-sit-dbdetmas\", \"mode\": \"add\", \"url\": \"https://mascustomisations.s3.ap-southeast-2.amazonaws.com/FujTestBuilds/mas-det-sit-dbdetmas\" }";
         
         String myUrl = "https://maxinst.manage.sit.vsba-aims.naviam.app/toolsapi/toolservice/updatecustomizationarchive";
@@ -921,7 +918,7 @@ public class CallToolsAPI
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody)) 
                 .build();
 
-           HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+           HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
            System.out.println("Status Code: " + response.statusCode());
            System.out.println("Response Body: " + response.body());
@@ -1121,11 +1118,11 @@ public class CallToolsAPI
 
 		System.out.println("getDETMASVersion entering");
 		
-		HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
+		//HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
                 
     	String tgtUrl = "https://" + manageUrl + "/maximo/api/systeminfo?lean=1";
     	 
-        try {
+        try (HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build()){
 
         	HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(tgtUrl)) 
@@ -1173,11 +1170,11 @@ public class CallToolsAPI
 
 		System.out.println("getCELMASVersion entering");
 		
-		HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
+		//HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
                 
     	String tgtUrl = "https://" + manageUrl + "/maximo/api/systeminfo?lean=1";
     	 
-        try {
+    	try (HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build()){
 
         	HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(tgtUrl)) 
@@ -1226,8 +1223,6 @@ public class CallToolsAPI
 		System.out.println("waitForMaxInst entering for " + event);
 		
 		boolean carryOn = false;
-		//HttpClient client = HttpClient.newHttpClient();
-		HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
 
         String requestBody = "{\"mode\": \"get\" }";
         
@@ -1245,7 +1240,7 @@ public class CallToolsAPI
 	                .POST(HttpRequest.BodyPublishers.ofString(requestBody)) 
 	                .build();
 
-	           HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+	           HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
 	           //System.out.println("Status Code: " + response.statusCode());
 	          // System.out.println("Response Body: " + response.body());
@@ -1297,7 +1292,7 @@ public class CallToolsAPI
 	{
 		System.out.println("isManageUp entering");
 		boolean isUp = false;
-		HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
+		//HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
 		
 		String tgtUrl = "https://" + manageUrl + "/maximo/api/systeminfo?lean=1";
 		
@@ -1309,7 +1304,7 @@ public class CallToolsAPI
 	                    .GET()
 	                    .build();
 
-	        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+	        HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
 	        System.out.println("Status Code: " + response.statusCode());
 	        System.out.println("Response Body: " + response.body());
@@ -1334,7 +1329,7 @@ public class CallToolsAPI
 		
 		boolean carryOn = false;
 		
-		HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
+		//HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
 		
 		String tgtUrl = "https://" + manageUrl + "/maximo/api/systeminfo?lean=1";
 		
@@ -1349,7 +1344,7 @@ public class CallToolsAPI
 	                    .GET()
 	                    .build();
 
-	           HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+	           HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
 	           //System.out.println("Status Code: " + response.statusCode());
 	          // System.out.println("Response Body: " + response.body());
@@ -1453,9 +1448,6 @@ public class CallToolsAPI
     {
 		System.out.println("Calling System Info end point");
 		boolean res = false;
-		
-    	//HttpClient client = HttpClient.newHttpClient();
-    	HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
                 
         //String myUrl = "https://mas.manage.sit.vsba-aims.naviam.app/maximo/api/systeminfo?lean=1";
         //String myUrl = "https://mas9wdm01.manage.mas9dem01.apps.mas9dem01.fujitsu-eam.com/maximo/api/systeminfo?lean=1";
@@ -1470,7 +1462,7 @@ public class CallToolsAPI
                 .GET()
                 .build();
 
-           HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+           HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
            System.out.println("Status Code: " + response.statusCode());
            System.out.println("Response Body: " + response.body());
@@ -1493,12 +1485,6 @@ public class CallToolsAPI
 	
 	private static void callJenkins()
     {
-		
-		HttpClient client = HttpClient.newBuilder().sslContext(insecureContext()).build();
-		
-    	//HttpClient client = HttpClient.newHttpClient();
-    	//HttpClient httpClient = HttpClient.newBuilder().sslContext(sslContext).build();
- 	                
         String myUrl = "https://eamjenkinsmas.australiasoutheast.cloudapp.azure.com:8443/jenkins/job/AutoTestsAll/buildWithParameters";
         
         try {
@@ -1511,7 +1497,7 @@ public class CallToolsAPI
         		    .method("POST", HttpRequest.BodyPublishers.ofString("TargetAgent=automation-vm&MASVersion=90&MASUrl=mas.manage.sit.vsba-aims.naviam.app&BINFile=01_ST_TC01_Assets.bin&RunTests=true"))
         		    .build();
         	
-           HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+           HttpResponse<String> response = GLOBAL_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
            System.out.println("Status Code: " + response.statusCode());
            System.out.println("Response Body: " + response.body());
